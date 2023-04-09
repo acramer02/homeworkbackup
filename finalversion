@@ -1,0 +1,238 @@
+---
+title: "Homework 08 One Way ANOVA"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+subtitle: Due by 11:59pm, Saturday, April 8, 2023
+author: S&DS 230/530/ENV 757
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Get my function for pairs plot AND get myResPlots function
+source("http://www.reuningscherer.net/s&ds230/Rfuncs/regJDRS.txt")
+```
+
+This assignment uses the movie dataset you used on the first exam.  We'll compare mean percent return (revenues/budget * 100) between movie genres using the 6 most prevalent genres you created on the exam.  You may want to review the exam to remind yourself about the variables contained in the data.
+
+The updated data you'll need is [here](http://reuningscherer.net/s&ds230/data/movieclean.csv) 
+
+**1)  One Way ANOVA of percent return for movies.** *(80 pts - 6 pts each except part 1.12 which is 14 pts)*
+
+1.1)  Read the data into an object called `movie` (do NOT use the option `as.is = TRUE`).   Update this object so that is only contains the columns `budget`, `genre`, `pctreturn` and `title`.  In addition, retain only rows that have complete data for these four columns.  As per usual, look at the first few rows of the data, get the dimension of the complete dataset.   Finally, attach the data to save on typing later.
+
+```{r}
+movie <- read.csv("http://reuningscherer.net/s&ds230/data/movieclean.csv", as.is = FALSE)
+movie <- na.omit(movie[ , c(1, 11, 12, 7)])
+
+head(movie)
+dim(movie)
+attach(movie)
+```
+
+1.2)  Make a boxplot of `pctreturn` by `genre`.   Superimpose a red dot at the mean percent return for each genre; also print this mean rounded to the nearest percent.
+
+```{r}
+means <- tapply(pctreturn, genre, mean)
+
+boxplot(pctreturn ~ genre, main = "Boxplot of Percent Return by Genre",
+        xlab = "Genre", ylab = "Percent Return", col = "orange")
+points(1:6, means, col = "red", pch = 19)
+text(1:6 + 0.175, means + 150, labels = round(means))
+```
+
+1.3)  Make a `stripplot` of percent return by genre.   Which plot do you find more instructive - the boxplot or the strip plot?
+
+```{r}
+library(lattice)
+stripplot(pctreturn ~ genre, main = "Strip plot of Percent Return by Genre",
+        xlab = "Genre", ylab = "Percent Return", col = "orange")
+```
+
+*I prefer the boxplot because it gives more information about the interquartile range and the mean.*
+
+1.4)  Just using the visual information provided by the boxplots, do you think that the distribution of observations inside each genre is approximately normal?   Do you think the standard deviation is approximately the same in each genre?  (Remember that ANOVA assumes we have a normal distribution inside each genre and that the standard deviation is the same across groups.)
+
+*The data looks right-skewed based on these two plots, and while some (animation stands out) might have bigger standard deviations, they look somewhat similar.*
+
+1.5)  Calculate the sample standard deviation for each group.   Calculate the ratio of largest to smallest sample standard deviation.   Is it reasonable to assume that the variances are the same across genres?
+
+```{r}
+stand_devs <- tapply(pctreturn, genre, sd)
+max(stand_devs) / min(stand_devs)
+```
+
+*The ratio of largest to smallest is 1.54 (< 2), so we can assume that the variances are the same across genres.*
+
+1.6)  Use the `aov()` function to compare mean percent return between genres.  Save your results to an object called `aov1`.  Get summary information for `aov1`.  Is the mean percent return statistically significantly different between genres?  In addition, confirm that the degrees of freedom reported by the test are what you expect (and write a sentence about this).
+
+```{r}
+aov1 <- aov(pctreturn ~ genre)
+summary(aov1)
+```
+
+*The mean percent return is statistically significantly different across genres since our p-value is effectively 0. The five degrees of freedom for genre makes sense since it should be the number of categories minus one, and the 928 degrees of freedom makes sense since they are the number of observations minus the number of groups.*
+
+1.7)  Fit percent return based on genre as a regression model WITHOUT an intercept.  Save the results to an object called `mod1`.  Following the example code provided in class, calculated confidence intervals for the mean percent return for each genre and report results to two decimal places.  Then make a plot of the resulting confidence intervals using the `plotCI()` function in the `plotrix` library.
+
+You'll notice that some intervals overlap while others do not.   What should you conclude from this?
+
+```{r}
+mod1 <- lm(pctreturn ~ genre -1)
+
+CIs <- confint(mod1)
+round(CIs, 2)
+
+library(plotrix)
+plotCI(means, 1:(length(means)), main = "Mean and CI's for Butterfat by Breed",
+       xlab = "Mean (and 95% CI)",  ylab = "",lwd = 2, col = "blue",
+       ui = CIs[ , 2], li = CIs[ , 1], axes = FALSE, err = "x")
+
+axis(side = 1)
+axis(side = 2, at = 1:(length(means)), label=levels(genre), las=2)
+
+```
+
+*Since some means' confidence intervals overlap, those genres actually are not so different from each other (e.g. Comedy and Other). However, we can probably say that Drama and Animation have very different means.*
+
+1.8)  Use the `pairwise.t.test()` function to calculate Holm's correction for comparing pairs of means.  Which pairs of genres have statistically significantly different percent returns (use alpha = 0.05)?
+
+```{r}
+pairwise.t.test(pctreturn, genre)
+```
+
+*Action and Adventure*
+*Action and Animation*
+*Adventure and Drama*
+*Animation and Comedy*
+*Animation and Drama*
+*Animation and Other*
+
+1.9)  Calculate Tukey simultaneous 95% confidence intervals for differences in mean percent return using the `TukeyHSD()` function.  Plot the resulting confidence intervals.  Do you reach the same conclusions as when using the Holm correction?   How to the Holm p-values compare to the Tukey p-values?
+
+```{r}
+(newmod <- TukeyHSD(aov1))
+
+par(mar = c(5, 10, 4, 1))
+plot(newmod, las = 1, col = "blue")
+
+```
+
+*Holm and Tukey reach the same conclusions about which pairings are statistically significantly different. The Holm p-values seem to be slightly lower among the significant values, but higher at the insignificant values.*
+
+1.10)  Use the `myResPlots2` function to get residual plots for `aov1`.  Does it appear that the residual have a normal distribution?  Is this good or bad?  Comment in a sentence or two about the plot of fits versus residuals.  Note : if you don't want to use the `myResPlots2' function, you can just make a normal quantile plot of residuals from your ANOVA model and also make a plot of fits vs. residuals.
+
+```{r}
+myResPlots2(aov1)
+```
+
+*The residual does not come close to a normal distribution, which is bad for our assumptions about regression. We also see way too many values more than 2 and 3 standard deviations away from the mean, showing that we definitely cannot assume that they are normal. This seems to suggest some kind of heteroskedasticity, and ANOVA assumes normal distributions.*
+
+1.11)  Even though we found that the ratio of largest to smallest sample standard deviaion was less than 2 (i.e., not real issues of heteroskdasticity), we might still want to try a Box-Cox procedure to help our right-skew issue.  Use the `boxCox()` function to calculate which power of lambda is recommended.   Report this value.  Is some transformation suggested?
+
+```{r}
+library(car)
+trans1 <- boxCox(lm(pctreturn ~ genre))
+(bc_val <- trans1$x[which.max(trans1$y)])
+
+#boxplot(log(pctreturn) ~ genre, col = "orange")
+# boxplot(pctreturn ^ 0.33 ~ genre, col = "orange")
+```
+
+*Lambda equals .26, so I would apply a fourth root --i.e. to the 1/4th power -- transformation.*
+
+1.12)  Create an object called `transpct` which is `pctreturn` to the suggested power of lambda based on Box-Cox.  In one block of code, repeat parts b) and e) through j)   (literally, just copy your code, replace `pctreturn` with `transpct` - except, you'll want to round the means to two decimal places in the boxplot).  
+
+Write about three sentences commenting on the fit of this model vs. the fit of the previous model.  Specifically, comment on the boxplot, whether any pairs of groups changed significance, the overall model significance, and the residual plots.
+
+```{r}
+transpct <- pctreturn ^ bc_val
+
+# b)
+means1 <- tapply(transpct, genre, mean)
+
+boxplot(transpct ~ genre, main = "Boxplot of Percent Return by Genre",
+        xlab = "Genre", ylab = "Percent Return", col = "orange")
+points(1:6, means1, col = "red", pch = 19)
+text(1:6 + 0.175, means1 - 0.2, labels = round(means1, 2))
+
+# e)
+stand_devs1 <- tapply(transpct, genre, sd)
+max(stand_devs1) / min(stand_devs1)
+
+# f)
+aov2 <- aov(transpct ~ genre)
+summary(aov2)
+
+# g)
+mod2 <- lm(transpct ~ genre -1)
+
+CIs1 <- confint(mod2)
+round(CIs1, 2)
+
+library(plotrix)
+plotCI(means1, 1:(length(means1)), main = "Mean and CI's for Butterfat by Breed",
+       xlab = "Mean (and 95% CI)",  ylab = "",lwd = 2, col = "blue",
+       ui = CIs1[ , 2], li = CIs1[ , 1], axes = FALSE, err = "x")
+
+axis(side = 1)
+axis(side = 2, at = 1:(length(means1)), label=levels(genre), las=2)
+
+# h)
+pairwise.t.test(transpct, genre)
+
+# i)
+(newmod2 <- TukeyHSD(aov2))
+
+par(mar = c(5, 10, 4, 1))
+plot(newmod2, las = 1, col = "blue")
+
+# j)
+myResPlots2(aov2)
+
+```
+
+*The boxplot shows that we now have data with far more similar means and standard deviations, suggesting a somewhat better fit for this model. Now, per the Holm pairwise comparisons, we do not see a significant difference between Adventure and Action. The normal quantile plots for the residual seems normal, but we still see some surprising outliers on the fits vs. residuals plots so there is still a little bit of heteroskedasticity. Overall, we can say that our model is closer to accurate now.*
+
+**2)  Non-parametric tests.** *(20 pts - 5pts each)*
+
+2.1)  Perform a Bartlett test to see whether variances of percent return are the same across genres.  Then, repeat for `transpct`.  Write one sentence about what you observe (be sure to review the characteristics of Bartlett's test).
+
+```{r}
+bartlett.test(pctreturn, genre)
+bartlett.test(transpct, genre)
+```
+
+*Before transformation: Our Chi squared distribution has a mean of 5 (5 df) and variance of 10 (2 x 5 df), so our observed value of 34.735 is way above what we could reasonably expect, so we can reject the null hypothesis of no difference in variances, with a statistically significant p-value near 0.*
+*After transformation: Chi squared falls well within expected distribution and p-value shows little statistically significant difference.*
+
+2.2)  Perform a Levene test to see whether variances of percent return are the same across genres.  Then, repeat for `transpct`.  Write one sentence about what you observe (be sure to review the characteristics of Levene's test).
+
+```{r}
+leveneTest(pctreturn, genre)
+leveneTest(transpct, genre)
+```
+
+*In the untransformed data, we see that our p-value for our F-statistic is less than 0.05, so that suggests there is we should reject the null hypothesis of no difference in variances by group  even without assuming a normal distribution; but we see a very very high probability of our F-statistic in the transformed data, showing that there we cannot reject the null hypothesis.*
+
+2.3)  Perform Welch's ANOVA which recall assumes unequal variances but which assumes normal distributions in each group  (i.e. compare `pctreturn` by `genre`).  Compare results to regular one-way ANOVA.  Is Welch's ANOVA a good choice here?  
+
+```{r}
+oneway.test(pctreturn ~ genre)
+summary(aov1)
+```
+
+*They both suggest that we should reject the null hypothesis of no differences in the means here. While ANOVA has a lower p-value, it assumes normal data which might not necessarily be the case. However, we should prefer it to the others because it assumes unequal variances, which we saw to be the case in 2.1 and 2.2.*
+
+2.4)  Perform a non-parametric Kruskal-Wallis test which recall makes NO assumptions about equal variances or about normality.  Compare results to regular one-way ANOVA.  Is Kruskal Wallis a good choice here?  
+
+```{r}
+kruskal.test(pctreturn ~ genre)
+summary(aov1)
+```
+
+*The Kruskal-Wallis rejects the null hypothesis because the p-value is nearly 0. We should trust it  because makes no assumptions about normal distributions or equal variances, which we need to do in this case. So while both agree that we have a significant difference here, we should trust Kruskal-Wallis to test for a significant difference.*
+
+
+THE END
